@@ -59,7 +59,7 @@
 #include <sys/sem.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <regex.h>
+#include <regex.h> 
 #include <alsa/asoundlib.h>
 
 #include "socket.hh"
@@ -163,7 +163,7 @@ void enqueue_frame(FramePlayer &player, const Chunk &frame)
 {
   if (frame.size() == 0)
   {
-    return;
+    return ;
   }
 
   const Optional<RasterHandle> raster = player.decode(frame);
@@ -405,7 +405,7 @@ int main(int argc, char *argv[])
   struct sockaddr_in addr; // 告诉sock 应该在什么地方licence
   char recv_buff[MTU];     // 接收缓冲区
 
-  int nRecLen; // 客户端地址长度!!!!!!
+  unsigned int nRecLen; // 客户端地址长度!!!!!!
 
   struct sockaddr_in cli; // 客户端地址
   int nRet;               // select返回值
@@ -414,7 +414,7 @@ int main(int argc, char *argv[])
   if (socka == -1)
   {
     printf("socket()/n");
-    return;
+    return 0;
   }
 
   memset(&addr, 0, sizeof(addr));
@@ -425,7 +425,7 @@ int main(int argc, char *argv[])
   if (bind(socka, (struct sockaddr *)&addr, sizeof(addr)) == -1) // bind socka
   {
     printf("bind()/n");
-    return;
+    return 0;
   }
 
   // 设置超时时间为6s
@@ -435,12 +435,13 @@ int main(int argc, char *argv[])
   memset(recv_buff, 0, sizeof(recv_buff)); // 清空接收缓冲区
 
   //0.设置参数
-  unsigned int pcm, tmp, dir;
-  int rate = 44100, channels = 2;
+  unsigned int pcm, tmp;
+  int channels = 2;
+  unsigned int rate=44100;
   snd_pcm_t *pcm_handle; //typedef struct _snd_pcm
-  char *buff;
-  int buff_size;
-  int count = 0;
+  //char *buff;
+  //int buff_size;
+  //int count = 0;
   snd_pcm_uframes_t frames; //typedef unsigned long
 
   //1.打开音频播放设备
@@ -454,30 +455,30 @@ int main(int argc, char *argv[])
   //snd_pcm_hw_params_set_xxx(pcm, hwparams, ...);  通过一系列的set函数来设置硬件参数中的基本参数
   //如， 通道数，采样率， 采样格式等等
   /* Set parameters */
-  if (pcm = snd_pcm_hw_params_set_access(pcm_handle, params,
-                                         SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
+  if ((pcm = snd_pcm_hw_params_set_access(pcm_handle, params, SND_PCM_ACCESS_RW_INTERLEAVED)< 0))
+                                     
     printf("ERROR: Can't set interleaved mode. %s\n", snd_strerror(pcm));
 
-  if (pcm = snd_pcm_hw_params_set_format(pcm_handle, params,
-                                         SND_PCM_FORMAT_S16_LE) < 0)
+  if ((pcm = snd_pcm_hw_params_set_format(pcm_handle, params,
+                                         SND_PCM_FORMAT_S16_LE) < 0))
     printf("ERROR: Can't set format. %s\n", snd_strerror(pcm));
 
-  if (pcm = snd_pcm_hw_params_set_channels(pcm_handle, params, channels) < 0)
+  if ((pcm = snd_pcm_hw_params_set_channels(pcm_handle, params, channels) < 0))
     printf("ERROR: Can't set channels number. %s\n", snd_strerror(pcm));
 
-  if (pcm = snd_pcm_hw_params_set_rate_near(pcm_handle, params, &rate, 0) < 0)
+  if ((pcm = snd_pcm_hw_params_set_rate_near(pcm_handle, params, &rate, 0) < 0))
     printf("ERROR: Can't set rate. %s\n", snd_strerror(pcm));
 
   // write paras
 
-  if (pcm = snd_pcm_hw_params(pcm_handle, params) < 0)
+  if ((pcm = snd_pcm_hw_params(pcm_handle, params) < 0))
     printf("ERROR: Can't set harware parameters. %s\n", snd_strerror(pcm));
   //snd_pcm_hw_params_free(params); // 释放不再使用的hwparams空间
 
   //3. 使用snd_pcm_sw_params_t配置一些高级软件参数， 比如使用中断模式等等
   snd_pcm_hw_params_get_period_size(params, &frames, 0);
-  buff_size = frames * channels * 2 /* 2 -> sample size */;
-  buff = (char *)malloc(buff_size);
+  //buff_size = frames * channels * 2 /* 2 -> sample size */;
+  //buff = (char *)malloc(buff_size);
   printf("frames = %lu.\n", frames);
   snd_pcm_hw_params_get_period_time(params, &tmp, NULL);
   //4. 调用snd_pcm_prepare(pcm)来使音频设备准备好接收pcm数据
@@ -498,7 +499,7 @@ int main(int argc, char *argv[])
     if (nRet == -1)
     {
       printf("select()\n");
-      return;
+      return 0;
     }
     else if (nRet == 0) // 超时
     {
@@ -526,15 +527,15 @@ int main(int argc, char *argv[])
         //     return 0;
         // }
 
-        if (pcm = snd_pcm_writei(pcm_handle, recv_buff, frames) == -EPIPE)
+        if ((pcm = snd_pcm_writei(pcm_handle, recv_buff, frames) == -EPIPE))
         {
           printf("XRUN.\n");
           snd_pcm_prepare(pcm_handle);
         }
-        else if (pcm < 0)
+        /*else if (pcm < 0)
         {
           printf("ERROR. Can't write to PCM device. %s\n", snd_strerror(pcm));
-        }
+        }*/
 
         struct rtp_header *p = (struct rtp_header *)recv_buff;
         printf("v = %d\n", p->v);
