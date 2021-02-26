@@ -126,6 +126,7 @@ uint16_t ezrand()
 }
 
 queue<RasterHandle> display_queue;
+queue<string> audio_queue;
 mutex mtx;
 condition_variable cv;
 
@@ -142,6 +143,30 @@ void display_task(const VP8Raster &example_raster, bool fullscreen)
     {
       display.draw(display_queue.front());
       display_queue.pop();
+    }
+  }
+}
+
+void audio_task(unsigned int &pcm,snd_pcm_t *pcm_handle,snd_pcm_uframes_t &audio_frames){
+  
+  cerr<<"audio start"<<endl;
+  /*audo para set end*/
+  while (true)
+  {
+    unique_lock<mutex> lock(mtx);
+    cv.wait(lock, []() { return not audio_queue.empty(); });
+    
+    while (not audio_queue.empty())
+    {
+      cerr<<"audio play"<<endl;
+      string pcm_payload=audio_queue.front();
+      char * recv_buff = new char [pcm_payload.length()+1];
+      strcpy (recv_buff, pcm_payload.c_str());
+      if ((pcm = snd_pcm_writei(pcm_handle, recv_buff, audio_frames) == -EPIPE)){
+          printf("XRUN.\n");
+          snd_pcm_prepare(pcm_handle);
+      }
+      audio_queue.pop();
     }
   }
 }
@@ -223,21 +248,21 @@ int main(int argc, char *argv[])
   cerr << "Connection ID: " << connection_id << endl;
 
   /* construct Socket for incoming  datagrams */
-  UDPSocket udpsocket,udpsocket2;
+  UDPSocket udpsocket;
   udpsocket.bind(Address("0", argv[optind]));
   udpsocket.set_timestamps();
 
-  udpsocket2.bind(Address("0", argv[optind+1]));
+  UDPSocket udpsocket2;
+  udpsocket2.bind(Address("0", argv[optind+3]));
   udpsocket2.set_timestamps();
 
   /* construct FramePlayer */
-  FramePlayer player(paranoid::stoul(argv[optind + 2]), paranoid::stoul(argv[optind + 3]));
+  FramePlayer player(paranoid::stoul(argv[optind + 1]), paranoid::stoul(argv[optind + 2]));
   player.set_error_concealment(true);
 
   /* construct display thread */
   thread([&player, fullscreen]() { display_task(player.example_raster(), fullscreen); }).detach();
 
-  /*audio play thread*/
   
 
   /* frame no => FragmentedFrame; used when receiving packets out of order */
@@ -308,16 +333,40 @@ int main(int argc, char *argv[])
     snd_pcm_close(pcm_handle);
     exit(1);
   }
-
-  /*audo para set end*/
-
+  //audio end
+  
+  /*audio play thread*/
+  thread([&]() { audio_task(pcm,pcm_handle,audio_frames); }).detach();
+  
   Poller poller;
+  cerr<<audio_queue.empty()<<endl;
+  poller.add_action(Poller::Action(
+      udpsocket2, Direction::In,
+      [&]() {
+        const auto new_pcm = udpsocket2.recv(); //从网络上接收音频数据
+        
+        audio_queue.emplace(new_pcm.payload);
+        cerr<<audio_queue.empty()<<endl;
+        return ResultType::Continue;
+      },
+      [&]() {return not udpsocket2.eof();}
+ ));
+ 
+ /*thread([&](){
+    const auto new_pcm = udpsocket2.recv(); //从网络上接收音频数据
+
+        cerr<<"audio recv";
+        audio_queue.emplace(new_pcm.payload);
+
+        
+ }).detach();*/
+ 
   poller.add_action(Poller::Action(
       udpsocket, Direction::In,
       [&]() {
         /* wait for next UDP datagram */
-        const auto new_fragment = udpsocket.recv(); //从网络上接收数据,一个I/O操作
-
+        const auto new_fragment = udpsocket.recv(); //从网络上接收数据
+        //cerr<<"video recv"<<endl;
         /* parse into Packet */
         const Packet packet{new_fragment.payload};
 
@@ -448,25 +497,29 @@ int main(int argc, char *argv[])
       [&]() { return not udpsocket.eof(); }
   ));
 
-  
-  
-  while(true){
-  
-    const auto new_pcm = udpsocket2.recv(); //从网络上接收音频数据
+  /*poller.add_action(Poller::Action(
+    udpsocket2, Direction::In, 
+    [&]() {
+      // wait for next UDP datagram 
+        const auto new_pcm = udpsocket2.recv(); //从网络上接收音频数据
 
-   char * recv_buff = new char [new_pcm.payload.length()+1];
-    strcpy (recv_buff, new_pcm.payload.c_str());
+        char * recv_buff = new char [new_pcm.payload.length()+1];
+        strcpy (recv_buff, new_pcm.payload.c_str());
       //音频解码
 
       //播放
-      thread([&](){
-        if ((pcm = snd_pcm_writei(pcm_handle, recv_buff, audio_frames) == -EPIPE)){
+      if ((pcm = snd_pcm_writei(pcm_handle, recv_buff, audio_frames) == -EPIPE)){
           printf("XRUN.\n");
           snd_pcm_prepare(pcm_handle);
         }
-       }).detach();
-  }
+
+    },
+    [&]() {return not udpsocket2.eof();}
+  ));
+  */
   
+ 
+
 
   
   /* handle events */

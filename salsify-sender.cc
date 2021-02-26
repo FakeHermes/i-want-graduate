@@ -308,10 +308,11 @@ int main(int argc, char *argv[])
   }
 
   /* construct Socket for outgoing datagrams */
-  UDPSocket udpsocket,udpsocket2;
+  UDPSocket udpsocket;
   udpsocket.connect(Address(argv[optind], argv[optind + 1]));
   udpsocket.set_timestamps();
-
+  
+  UDPSocket udpsocket2;
   udpsocket2.connect(Address(argv[optind], argv[optind + 2]));
   udpsocket2.set_timestamps();
 
@@ -394,6 +395,7 @@ int main(int argc, char *argv[])
   system_clock::time_point next_mem_usage_report = system_clock::now();
 
   Poller poller;
+  
 
   //audio para set
 	// int err;
@@ -520,29 +522,57 @@ int main(int argc, char *argv[])
   // ));
 
   //从文件读取音频
-  poller.add_action(Poller::Action(
+  /*poller.add_action(Poller::Action(
     udpsocket, Direction::Out, [&](){
       
-      FILE *ts_file = fopen(argv[optind+4], "r+"); 
+      FILE *ts_file = fopen(argv[optind+4], "r"); 
         char h[44];
         char *buff;
         buff=(char *)malloc(1024);
         int len __attribute__((unused)) =1;
-	     len=fread(h,1,44,ts_file); //44numofcount:0,去除wav header
-	    while(!feof(ts_file)){  
+	      len=fread(h,1,44,ts_file); //44numofcount:0,去除wav header
+	      while(!feof(ts_file)){  
         len=fread(buff, 1, 1024, ts_file);  
 
-        string audio_frame(buff);
+        string audio_frame="121";
         
         udpsocket2.send(audio_frame);//发送音频数据
+        cerr << "send audio." << endl;
         usleep(10000);  
-	    } 
+	    }
       
 
       return ResultType::Continue;
     }
-  ));
+  ));*/
+  
+  thread([&](){
+    FILE *ts_file = fopen(argv[optind+4], "r"); 
 
+        char h[44];
+
+        char *buff;
+
+        buff=(char *)malloc(1024);
+
+        int len __attribute__((unused)) =1;
+
+	      len=fread(h,1,44,ts_file); //44numofcount:0,去除wav header
+
+	      while(!feof(ts_file)){  
+
+        len=fread(buff, 1, 1024, ts_file);  
+
+        string audio_frame(buff);
+
+        udpsocket2.send(audio_frame);//发送音频数据
+
+        cerr << "send audio." << endl;
+
+        usleep(10000);  
+
+	    }
+  }).detach();
  
 
   /* fetch frames from webcam */
@@ -933,6 +963,7 @@ int main(int argc, char *argv[])
           assert( not pacer.empty() );
 
           udpsocket.send( pacer.front() );
+          cerr << "send video." << endl;
           pacer.pop();
         }
 
