@@ -147,12 +147,13 @@ void display_task(const VP8Raster &example_raster, bool fullscreen)
   }
 }
 
-void audio_task(int &pcm,snd_pcm_t *pcm_handle,snd_pcm_uframes_t frames,unsigned int &tmp,int &seconds,int &buff_size)
+void audio_task(int &pcm,snd_pcm_t *pcm_handle,snd_pcm_uframes_t frames)
 {
   
   
   /*audo para set end*/
-  /*while (true)
+  
+  while (true)
   {
     unique_lock<mutex> lock(mtx);
     cv.wait(lock, []() { return not audio_queue.empty(); });
@@ -160,9 +161,9 @@ void audio_task(int &pcm,snd_pcm_t *pcm_handle,snd_pcm_uframes_t frames,unsigned
     while (not audio_queue.empty())
     {
       string pcm_payload=audio_queue.front();
-      char * recv_buff = new char [pcm_payload.length()+1];
-      strcpy (recv_buff, pcm_payload.c_str());
-     // printf("%s\n",recv_buff);
+      const char * recv_buff = pcm_payload.c_str();
+      //strcpy (recv_buff, pcm_payload.c_str());
+      printf("pcm_payload size:%lu\n",pcm_payload.length());
       
     
 		  
@@ -173,32 +174,8 @@ void audio_task(int &pcm,snd_pcm_t *pcm_handle,snd_pcm_uframes_t frames,unsigned
       audio_queue.pop();
       
     }
-  }*/
-  int loops;
-  char *buff;
-  buff = (char *) malloc(buff_size);
-  for (loops = (seconds * 1000000) / tmp; loops > 0; loops--) {
-
-            if ((pcm = read(0, buff, buff_size) == 0)) {
-              printf("Early end of file.\n");
-              return ;
-            }
-
-            if ((pcm = snd_pcm_writei(pcm_handle, buff, frames) == -EPIPE)) {
-			        printf("XRUN.\n");
-			        snd_pcm_prepare(pcm_handle);
-		        } else if (pcm < 0) {
-			        printf("ERROR. Can't write to PCM device. %s\n", snd_strerror(pcm));
-		        }
-           // printf("%s\n",buff);
-           
-            cerr << "send audio." << endl;
-
-          }
-
-          
-          free(buff);
-          return ;
+  }
+  
 }
 
 void enqueue_frame(FramePlayer &player, const Chunk &frame)
@@ -293,7 +270,7 @@ int main(int argc, char *argv[])
 	snd_pcm_t *pcm_handle;
 	snd_pcm_hw_params_t *params;
 	snd_pcm_uframes_t frames;
-	
+	//char *buff;
 	int buff_size;
 
   /* Open the PCM device in playback mode */
@@ -348,8 +325,11 @@ int main(int argc, char *argv[])
 	snd_pcm_hw_params_get_period_size(params, &frames, 0);
 
 	buff_size = frames * channels * 2 /* 2 -> sample size */;
-	
-	snd_pcm_hw_params_get_period_time(params, &tmp, NULL);
+	//buff = (char *) malloc(buff_size);
+
+	printf("buff_size: %d\n",buff_size);
+
+  snd_pcm_hw_params_get_period_time(params, &tmp, NULL);
 
   /*创建一个保存PCM数据的文件*/
 	if((pcm_data_file = fopen("m1.wav", "wb")) == NULL)
@@ -367,7 +347,7 @@ int main(int argc, char *argv[])
   thread([&player, fullscreen]() { display_task(player.example_raster(), fullscreen); }).detach();
 
   /*audio play thread*/
-  thread([&]() { audio_task(pcm,pcm_handle,frames,tmp,seconds,buff_size); }).detach();
+  thread([&]() { audio_task(pcm,pcm_handle,frames); }).detach();
 
   /* frame no => FragmentedFrame; used when receiving packets out of order */
   unordered_map<size_t, FragmentedFrame> fragmented_frames;
@@ -389,7 +369,7 @@ int main(int argc, char *argv[])
 
   Poller poller;
   
-  /*poller.add_action(Poller::Action(
+  poller.add_action(Poller::Action(
       udpsocket2, Direction::In,
       [&]() {
         const auto new_pcm = udpsocket2.recv(); //从网络上接收音频数据
@@ -399,7 +379,7 @@ int main(int argc, char *argv[])
         return ResultType::Continue;
       },
       [&]() {return not udpsocket2.eof();}
- ));*/
+ ));
  
   poller.add_action(Poller::Action(
       udpsocket, Direction::In,
